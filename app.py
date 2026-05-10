@@ -3,6 +3,7 @@ import pickle
 import re
 import os
 import nltk
+import gdown
 from nltk.corpus import stopwords
 
 # Try importing snscrape safely
@@ -11,6 +12,17 @@ try:
     SCRAPER_AVAILABLE = True
 except:
     SCRAPER_AVAILABLE = False
+
+# ---------------- DATASET ID ----------------
+DATASET_ID = "1XWnoBq0Rtgl-_eBC-Ra_L_633jVmg0Nw"
+
+# Dataset filename
+DATASET_FILE = "training.1600000.processed.noemoticon.csv"
+
+# Download dataset automatically from Google Drive
+if not os.path.exists(DATASET_FILE):
+    url = f"https://drive.google.com/uc?id={DATASET_ID}"
+    gdown.download(url, DATASET_FILE, quiet=False)
 
 # ---------------- STOPWORDS ----------------
 @st.cache_resource
@@ -52,7 +64,7 @@ def clean_text(text, stop_words):
     words = [word for word in words if word not in stop_words]
     return " ".join(words)
 
-# ---------------- PREDICT ----------------
+# ---------------- PREDICT SENTIMENT ----------------
 def predict_sentiment(text, model, vectorizer, stop_words):
     cleaned = clean_text(text, stop_words)
 
@@ -88,13 +100,17 @@ def fetch_tweets(username, num_tweets):
 
     return tweets
 
-# ---------------- MAIN ----------------
+# ---------------- MAIN APP ----------------
 def main():
-    st.set_page_config(page_title="Sentiment Analyzer", layout="centered")
+    st.set_page_config(page_title="Twitter Sentiment Analysis", layout="centered")
 
     st.title("🐦 Twitter Sentiment Analysis")
 
-    # Load resources safely
+    st.sidebar.title("📁 Dataset Info")
+    st.sidebar.write("Dataset downloaded from Google Drive")
+    st.sidebar.code(DATASET_ID)
+
+    # Load resources
     try:
         stop_words = load_stopwords()
         model, vectorizer = load_model_and_vectorizer()
@@ -107,47 +123,78 @@ def main():
         ["Input text", "Get Tweets from User"]
     )
 
-    # -------- OPTION 1 --------
+    # -------- TEXT INPUT --------
     if option == "Input text":
         text_input = st.text_area("Enter text")
 
-        if st.button("Analyze", key="analyze_btn"):
+        if st.button("Analyze"):
             if text_input.strip() == "":
                 st.warning("⚠️ Please enter some text")
             else:
                 sentiment = predict_sentiment(
-                    text_input, model, vectorizer, stop_words
+                    text_input,
+                    model,
+                    vectorizer,
+                    stop_words
                 )
+
                 st.success(f"Sentiment: {sentiment}")
 
-    # -------- OPTION 2 --------
+    # -------- TWITTER USER --------
     elif option == "Get Tweets from User":
-        username = st.text_input("Enter Twitter Username (without @)")
-        num_tweets = st.slider("Number of tweets", 1, 50, 10)
 
-        if st.button("Fetch & Analyze", key="fetch_btn"):
+        username = st.text_input(
+            "Enter Twitter Username (without @)"
+        )
+
+        num_tweets = st.slider(
+            "Number of tweets",
+            1,
+            50,
+            10
+        )
+
+        if st.button("Fetch & Analyze"):
+
             if username.strip() == "":
                 st.warning("⚠️ Please enter a username")
+
             else:
+
                 with st.spinner("Fetching tweets..."):
-                    tweets = fetch_tweets(username, num_tweets)
+                    tweets = fetch_tweets(
+                        username,
+                        num_tweets
+                    )
 
                 if len(tweets) == 0:
-                    st.warning("No tweets found or scraping blocked.")
+                    st.warning(
+                        "No tweets found or scraping blocked."
+                    )
+
                 else:
-                    positive, negative, neutral = 0, 0, 0
+
+                    positive = 0
+                    negative = 0
+                    neutral = 0
 
                     st.subheader("📊 Results")
 
                     for t in tweets:
+
                         sentiment = predict_sentiment(
-                            t, model, vectorizer, stop_words
+                            t,
+                            model,
+                            vectorizer,
+                            stop_words
                         )
 
                         if sentiment == "Positive":
                             positive += 1
+
                         elif sentiment == "Negative":
                             negative += 1
+
                         else:
                             neutral += 1
 
@@ -157,10 +204,11 @@ def main():
 
                     # -------- SUMMARY --------
                     st.subheader("📈 Summary")
+
                     st.write(f"✅ Positive: {positive}")
                     st.write(f"❌ Negative: {negative}")
                     st.write(f"➖ Neutral: {neutral}")
 
-# ---------------- RUN ----------------
+# ---------------- RUN APP ----------------
 if __name__ == "__main__":
     main()
