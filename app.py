@@ -6,6 +6,9 @@ import nltk
 import gdown
 from nltk.corpus import stopwords
 
+# Download NLTK stopwords
+nltk.download('stopwords')
+
 # Try importing snscrape safely
 try:
     import snscrape.modules.twitter as sntwitter
@@ -27,110 +30,138 @@ if not os.path.exists(DATASET_FILE):
 # ---------------- STOPWORDS ----------------
 @st.cache_resource
 def load_stopwords():
-    try:
-        return set(stopwords.words('english'))
-    except:
-        nltk.download('stopwords')
-        return set(stopwords.words('english'))
+    return set(stopwords.words('english'))
 
 # ---------------- LOAD MODEL ----------------
 @st.cache_resource
 def load_model_and_vectorizer():
-    base_path = os.path.dirname(__file__)
 
-    model_path = os.path.join(base_path, "model.pkl")
-    vectorizer_path = os.path.join(base_path, "vectorizer.pkl")
+    model_path = "model.pkl"
+    vectorizer_path = "vectorizer.pkl"
 
+    # Check files
     if not os.path.exists(model_path):
-        st.error("❌ model.pkl not found in project folder")
+        st.error("❌ model.pkl not found")
         st.stop()
 
     if not os.path.exists(vectorizer_path):
-        st.error("❌ vectorizer.pkl not found in project folder")
+        st.error("❌ vectorizer.pkl not found")
         st.stop()
 
-    with open(model_path, 'rb') as f:
+    # Load model
+    with open(model_path, "rb") as f:
         model = pickle.load(f)
 
-    with open(vectorizer_path, 'rb') as f:
+    # Load vectorizer
+    with open(vectorizer_path, "rb") as f:
         vectorizer = pickle.load(f)
 
     return model, vectorizer
 
 # ---------------- CLEAN TEXT ----------------
 def clean_text(text, stop_words):
-    text = re.sub('[^a-zA-Z]', ' ', str(text))
+
+    text = re.sub(r'[^a-zA-Z]', ' ', str(text))
+
     words = text.lower().split()
-    words = [word for word in words if word not in stop_words]
+
+    words = [
+        word for word in words
+        if word not in stop_words
+    ]
+
     return " ".join(words)
 
-# ---------------- PREDICT SENTIMENT ----------------
+# ---------------- PREDICT ----------------
 def predict_sentiment(text, model, vectorizer, stop_words):
+
     cleaned = clean_text(text, stop_words)
 
     if cleaned.strip() == "":
         return "Neutral"
 
     vector = vectorizer.transform([cleaned])
-    sentiment = model.predict(vector)
 
-    return "Negative" if sentiment[0] == 0 else "Positive"
+    prediction = model.predict(vector)
+
+    if prediction[0] == 0:
+        return "Negative"
+    else:
+        return "Positive"
 
 # ---------------- FETCH TWEETS ----------------
 def fetch_tweets(username, num_tweets):
+
     tweets = []
 
     if not SCRAPER_AVAILABLE:
-        st.error("snscrape not installed. Run: pip install snscrape")
+        st.error("❌ snscrape not installed")
         return tweets
 
     try:
+
         scraper = sntwitter.TwitterUserScraper(username)
 
         for i, tweet in enumerate(scraper.get_items()):
+
             if i >= num_tweets:
                 break
 
             if tweet.content and tweet.lang == "en":
                 tweets.append(tweet.content)
 
-    except Exception:
-        st.error("⚠️ Twitter scraping failed. Try another username.")
+    except:
+        st.error("⚠️ Twitter scraping failed")
         return []
 
     return tweets
 
 # ---------------- MAIN APP ----------------
 def main():
-    st.set_page_config(page_title="Twitter Sentiment Analysis", layout="centered")
+
+    st.set_page_config(
+        page_title="Twitter Sentiment Analysis",
+        layout="centered"
+    )
 
     st.title("🐦 Twitter Sentiment Analysis")
 
     st.sidebar.title("📁 Dataset Info")
-    st.sidebar.write("Dataset downloaded from Google Drive")
+    st.sidebar.write("Dataset Google Drive ID")
     st.sidebar.code(DATASET_ID)
 
     # Load resources
     try:
         stop_words = load_stopwords()
         model, vectorizer = load_model_and_vectorizer()
+
     except Exception as e:
         st.error(f"Startup Error: {e}")
         return
 
+    # Select option
     option = st.selectbox(
         "Choose an option",
-        ["Input text", "Get Tweets from User"]
+        [
+            "Input text",
+            "Get Tweets from User"
+        ]
     )
 
-    # -------- TEXT INPUT --------
+    # ---------------- TEXT INPUT ----------------
     if option == "Input text":
-        text_input = st.text_area("Enter text")
+
+        text_input = st.text_area(
+            "Enter text"
+        )
 
         if st.button("Analyze"):
+
             if text_input.strip() == "":
-                st.warning("⚠️ Please enter some text")
+                st.warning("⚠️ Please enter text")
+
             else:
+
                 sentiment = predict_sentiment(
                     text_input,
                     model,
@@ -138,13 +169,15 @@ def main():
                     stop_words
                 )
 
-                st.success(f"Sentiment: {sentiment}")
+                st.success(
+                    f"Sentiment: {sentiment}"
+                )
 
-    # -------- TWITTER USER --------
+    # ---------------- TWITTER INPUT ----------------
     elif option == "Get Tweets from User":
 
         username = st.text_input(
-            "Enter Twitter Username (without @)"
+            "Enter Twitter Username"
         )
 
         num_tweets = st.slider(
@@ -157,19 +190,23 @@ def main():
         if st.button("Fetch & Analyze"):
 
             if username.strip() == "":
-                st.warning("⚠️ Please enter a username")
+                st.warning("⚠️ Enter username")
 
             else:
 
-                with st.spinner("Fetching tweets..."):
+                with st.spinner(
+                    "Fetching tweets..."
+                ):
+
                     tweets = fetch_tweets(
                         username,
                         num_tweets
                     )
 
                 if len(tweets) == 0:
+
                     st.warning(
-                        "No tweets found or scraping blocked."
+                        "No tweets found"
                     )
 
                 else:
@@ -180,10 +217,10 @@ def main():
 
                     st.subheader("📊 Results")
 
-                    for t in tweets:
+                    for tweet in tweets:
 
                         sentiment = predict_sentiment(
-                            t,
+                            tweet,
                             model,
                             vectorizer,
                             stop_words
@@ -198,17 +235,28 @@ def main():
                         else:
                             neutral += 1
 
-                        st.write(f"📝 {t}")
-                        st.write(f"👉 Sentiment: {sentiment}")
+                        st.write(f"📝 {tweet}")
+                        st.write(
+                            f"👉 Sentiment: {sentiment}"
+                        )
+
                         st.write("---")
 
-                    # -------- SUMMARY --------
+                    # Summary
                     st.subheader("📈 Summary")
 
-                    st.write(f"✅ Positive: {positive}")
-                    st.write(f"❌ Negative: {negative}")
-                    st.write(f"➖ Neutral: {neutral}")
+                    st.write(
+                        f"✅ Positive: {positive}"
+                    )
 
-# ---------------- RUN APP ----------------
+                    st.write(
+                        f"❌ Negative: {negative}"
+                    )
+
+                    st.write(
+                        f"➖ Neutral: {neutral}"
+                    )
+
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     main()
